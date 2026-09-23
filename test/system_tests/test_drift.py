@@ -270,6 +270,58 @@ def test_outflow_bc_decides_what_an_unlabelled_boundary_means(outflow):
     assert np.max(np.abs(computed - exact)) < 1e-4, (computed[-1], exact[-1])
 
 
+@pytest.mark.parametrize("outflow", [False, True])
+def test_outflow_bc_in_a_transient_run(outflow):
+    """The transient twin of the test above: start empty and march to steady state.
+
+    Writing ``c = exp(v x / 2D) u`` makes the operator self-adjoint, and every transient
+    mode decays at least as fast as ``exp(-v^2 t / 4D)``. The wall keeps a mode
+    ``u ~ x`` that decays at exactly that rate, ``exp(-t)`` here, so ``t = 20`` is
+    needed for it to fall below the tolerance. Regression test for
+    https://github.com/festim-dev/FESTIM/issues/1267, where a transient run with an
+    :class:`festim.OutflowBC` crashed on the first time step.
+    """
+    length, D_0, v_x, n = 1.0, 1.0, 2.0, 400
+
+    material = F.Material(D_0=D_0, E_D=0.0)
+    volume = F.VolumeSubdomain1D(id=1, borders=[0.0, length], material=material)
+    left = F.SurfaceSubdomain1D(id=1, x=0.0)
+    right = F.SurfaceSubdomain1D(id=2, x=length)
+    H = F.Species("H", mobile=True)
+
+    festim_mesh = F.Mesh1D(np.linspace(0.0, length, n + 1))
+    velocity = _velocity(
+        festim_mesh.mesh, lambda x: np.vstack([np.full_like(x[0], v_x)])
+    )
+
+    boundary_conditions = [F.FixedConcentrationBC(subdomain=left, value=1.0, species=H)]
+    if outflow:
+        boundary_conditions.append(F.OutflowBC(subdomain=right, species=H))
+
+    model = F.HydrogenTransportProblem(
+        mesh=festim_mesh,
+        subdomains=[volume, left, right],
+        species=[H],
+        temperature=500.0,
+        boundary_conditions=boundary_conditions,
+        drift_terms=[F.AdvectionTerm(velocity=velocity, subdomain=volume, species=H)],
+        settings=F.Settings(
+            atol=1e-12,
+            rtol=1e-12,
+            transient=True,
+            final_time=20.0,
+            stepsize=F.Stepsize(0.1),
+        ),
+    )
+    model.initialise()
+    model.run()
+
+    x, computed = _profile(H)
+    exact = np.ones_like(x) if outflow else np.exp(v_x * x / D_0)
+
+    assert np.max(np.abs(computed - exact)) < 1e-4, (computed[-1], exact[-1])
+
+
 def test_outflow_bc_is_a_no_op_without_drift():
     """It cancels a drift boundary term, so with no drift there is nothing to cancel."""
     length, n = 1.0, 50

@@ -39,6 +39,11 @@ class OutflowBC:
         self.species = species
 
     @property
+    def time_dependent(self) -> bool:
+        # the drift velocity lives on the drift term, so there is nothing here to update
+        return False
+
+    @property
     def species(self) -> Species:
         return self._species
 
