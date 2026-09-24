@@ -40,7 +40,8 @@ class OutflowBC:
 
     @property
     def time_dependent(self) -> bool:
-        # the drift velocity lives on the drift term, so there is nothing here to update
+        """Always ``False``: the outflow term is built from the drift term's velocity,
+        which is updated with the drift term, so there is nothing here to update."""
         return False
 
     @property
