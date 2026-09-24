@@ -282,6 +282,9 @@ def test_outflow_bc_in_a_transient_run(switch_on):
     is built from the drift term's velocity, which is what lets the BC report
     ``time_dependent = False``; if the boundary term kept the stale ``v = 0`` the
     outlet would act as a wall and the profile would head for ``e^(2x)`` instead.
+    The profile alone cannot tell a drift that switched on from one that never did,
+    since pure diffusion also relaxes to ``c = 1``, so the test also checks that the
+    outlet carries the advective flux ``v c = v``.
 
     Regression test for https://github.com/festim-dev/FESTIM/issues/1267, where a
     transient run with an :class:`festim.OutflowBC` crashed on the first time step.
@@ -302,6 +305,8 @@ def test_outflow_bc_in_a_transient_run(switch_on):
     else:
         velocity = moving
 
+    outlet_flux = F.SurfaceFlux(field=H, surface=right)
+
     model = F.HydrogenTransportProblem(
         mesh=festim_mesh,
         subdomains=[volume, left, right],
@@ -312,6 +317,7 @@ def test_outflow_bc_in_a_transient_run(switch_on):
             F.OutflowBC(subdomain=right, species=H),
         ],
         drift_terms=[F.AdvectionTerm(velocity=velocity, subdomain=volume, species=H)],
+        exports=[outlet_flux],
         settings=F.Settings(
             atol=1e-12,
             rtol=1e-12,
@@ -326,6 +332,7 @@ def test_outflow_bc_in_a_transient_run(switch_on):
     _, computed = _profile(H)
 
     assert np.max(np.abs(computed - 1.0)) < 1e-8, computed[-1]
+    assert np.isclose(outlet_flux.data[-1], v_x, rtol=1e-8), outlet_flux.data[-1]
 
 
 def test_outflow_bc_is_a_no_op_without_drift():
